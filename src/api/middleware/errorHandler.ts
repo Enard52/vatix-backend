@@ -13,6 +13,10 @@ import {
 } from "./errors.js";
 import type { ErrorResponse } from "../../types/errors.js";
 import { createErrorEnvelope } from "@vatix/shared/errors.js";
+import {
+  MarketTransitionError,
+  MARKET_INVALID_TRANSITION_CODE,
+} from "@vatix/shared/marketLifecycle.js";
 import { config } from "../../config.js";
 
 function resolveCode(error: Error, statusCode: number): string {
@@ -23,6 +27,12 @@ function resolveCode(error: Error, statusCode: number): string {
   if (error instanceof MatchingUnavailableError) return "MATCHING_UNAVAILABLE";
   if (error instanceof ServiceUnavailableError) return "SERVICE_UNAVAILABLE";
   if (error instanceof ContractError || error.name === "ContractError") return "CONTRACT_ERROR";
+  if (
+    error instanceof MarketTransitionError ||
+    error.name === "MarketTransitionError"
+  ) {
+    return MARKET_INVALID_TRANSITION_CODE;
+  }
   if (error instanceof AppError) return error.code;
   if (statusCode >= 500) return "INTERNAL_ERROR";
   return "BAD_REQUEST";
@@ -39,6 +49,11 @@ export function errorHandler(
   let statusCode = 500;
   if ("statusCode" in error && typeof error.statusCode === "number") {
     statusCode = error.statusCode;
+  } else if (
+    error instanceof MarketTransitionError ||
+    error.name === "MarketTransitionError"
+  ) {
+    statusCode = 409;
   } else if (error instanceof ContractError || error.name === "ContractError") {
     statusCode = 400;
   }

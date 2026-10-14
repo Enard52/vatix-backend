@@ -7,6 +7,10 @@ import {
   UnauthorizedError,
   ForbiddenError,
 } from "./errors.js";
+import {
+  MarketTransitionError,
+  MARKET_INVALID_TRANSITION_CODE,
+} from "@vatix/shared/marketLifecycle.js";
 
 describe("Error Handler Middleware", () => {
   let server: FastifyInstance;
@@ -114,6 +118,53 @@ describe("Error Handler Middleware", () => {
     });
   });
 
+  describe("MarketTransitionError", () => {
+    it("returns 409 with MARKET_INVALID_TRANSITION_CODE and no stack field", async () => {
+      server.get("/test", async () => {
+        throw new MarketTransitionError("RESOLVED", "CANCELLED");
+      });
+      const res = await server.inject({ method: "GET", url: "/test" });
+      expect(res.statusCode).toBe(409);
+      const body = JSON.parse(res.body);
+      expect(body.code).toBe(MARKET_INVALID_TRANSITION_CODE);
+      expect(body.error).toBe("Illegal market transition RESOLVED -> CANCELLED");
+      expect(body.stack).toBeUndefined();
+    });
+
+    it("logs at warn level as a client error", async () => {
+      const warnLogs: unknown[] = [];
+      const errorLogs: unknown[] = [];
+      const mockLogger: any = {
+        level: "warn",
+        info: () => {},
+        debug: () => {},
+        fatal: () => {},
+        trace: () => {},
+        warn: (ctx: unknown, msg?: string) => {
+          warnLogs.push({ ctx, msg });
+        },
+        error: (ctx: unknown, msg?: string) => {
+          errorLogs.push({ ctx, msg });
+        },
+        child: () => mockLogger,
+      };
+      const testServer = Fastify({
+        loggerInstance: mockLogger,
+        genReqId: () => "test-request-id",
+      });
+      testServer.setErrorHandler(errorHandler);
+      testServer.get("/test", async () => {
+        throw new MarketTransitionError("ACTIVE", "ACTIVE");
+      });
+
+      const res = await testServer.inject({ method: "GET", url: "/test" });
+      expect(res.statusCode).toBe(409);
+      expect(warnLogs.length).toBeGreaterThan(0);
+      expect(errorLogs.length).toBe(0);
+      await testServer.close();
+    });
+  });
+
   describe("generic Error", () => {
     it("returns 500 with code internal_error", async () => {
       server.get("/test", async () => {
@@ -183,6 +234,7 @@ describe("Error Handler Middleware", () => {
         [() => new NotFoundError("nope"), "NOT_FOUND"],
         [() => new UnauthorizedError("denied"), "UNAUTHORIZED"],
         [() => new ForbiddenError("forbidden"), "FORBIDDEN"],
+        [() => new MarketTransitionError("ACTIVE", "ACTIVE"), MARKET_INVALID_TRANSITION_CODE],
         [() => new Error("boom"), "INTERNAL_ERROR"],
       ];
 
