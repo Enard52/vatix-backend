@@ -82,11 +82,23 @@ const processEnv: Env =
 // Validation helpers (pure functions — no side effects)
 // ---------------------------------------------------------------------------
 
+function requireSecret(name: string, env: Env): string {
+  const raw = env[name];
+  if (raw === undefined || raw.trim() === "") {
+    throw new ConfigValidationError(
+      `Missing required environment variable: ${name}`,
+      { code: CONFIG_ERROR_CODES.ENV_MISSING, variable: name }
+    );
+  }
+  return raw.trim();
+}
+
 function requireString(name: string, env: Env): string {
   const raw = env[name];
   if (!raw || raw.trim() === "") {
     throw new ConfigValidationError(
-      `Missing required environment variable: ${name}`
+      `Missing required environment variable: ${name}`,
+      { code: CONFIG_ERROR_CODES.ENV_MISSING, variable: name }
     );
   }
   return raw.trim();
@@ -299,9 +311,9 @@ export function loadBaseConfig(env: Env = processEnv): BaseConfig {
       env,
       { fallback: 86400 }
     ),
-    oracleSecretKey: requireString("ORACLE_SECRET_KEY", env),
-    apiKey: requireString("API_KEY", env),
-    adminToken: requireString("ADMIN_TOKEN", env),
+    oracleSecretKey: requireSecret("ORACLE_SECRET_KEY", env),
+    apiKey: requireSecret("API_KEY", env),
+    adminToken: requireSecret("ADMIN_TOKEN", env),
     corsAllowedOrigins,
     rateLimiting: {
       global: {

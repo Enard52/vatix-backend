@@ -34,10 +34,56 @@ describe("loadBaseConfig", () => {
     expect(() => loadBaseConfig(env)).toThrow("REDIS_URL");
   });
 
-  it("throws on missing ORACLE_SECRET_KEY", () => {
-    const env = { ...BASE_ENV, ORACLE_SECRET_KEY: undefined };
-    expect(() => loadBaseConfig(env)).toThrow("ORACLE_SECRET_KEY");
-  });
+  const REQUIRED_SECRETS = [
+    "ORACLE_SECRET_KEY",
+    "API_KEY",
+    "ADMIN_TOKEN",
+  ] as const;
+
+  for (const secret of REQUIRED_SECRETS) {
+    it(`throws on missing ${secret}`, () => {
+      const env = { ...BASE_ENV, [secret]: undefined };
+      expect(() => loadBaseConfig(env)).toThrow(ConfigValidationError);
+      expect(() => loadBaseConfig(env)).toThrow(secret);
+    });
+
+    it(`throws on empty string for ${secret}`, () => {
+      const env = { ...BASE_ENV, [secret]: "" };
+      expect(() => loadBaseConfig(env)).toThrow(ConfigValidationError);
+      try {
+        loadBaseConfig(env);
+      } catch (err: unknown) {
+        expect(err).toBeInstanceOf(ConfigValidationError);
+        const error = err as ConfigValidationError;
+        expect(error.message).toContain(secret);
+      }
+    });
+
+    it(`throws on whitespace-only value for ${secret}`, () => {
+      const whitespaceVal = "   \t\n  ";
+      const env = { ...BASE_ENV, [secret]: whitespaceVal };
+      expect(() => loadBaseConfig(env)).toThrow(ConfigValidationError);
+      try {
+        loadBaseConfig(env);
+      } catch (err: unknown) {
+        expect(err).toBeInstanceOf(ConfigValidationError);
+        const error = err as ConfigValidationError;
+        expect(error.message).toContain(secret);
+        expect(error.message).not.toContain(whitespaceVal);
+      }
+    });
+
+    it(`trims surrounding whitespace for valid ${secret}`, () => {
+      const env = { ...BASE_ENV, [secret]: "  valid-secret-value  " };
+      const config = loadBaseConfig(env);
+      const keyMap: Record<string, string> = {
+        ORACLE_SECRET_KEY: config.oracleSecretKey,
+        API_KEY: config.apiKey,
+        ADMIN_TOKEN: config.adminToken,
+      };
+      expect(keyMap[secret]).toBe("valid-secret-value");
+    });
+  }
 
   it("throws on invalid NODE_ENV", () => {
     const env = { ...BASE_ENV, NODE_ENV: "staging" };
